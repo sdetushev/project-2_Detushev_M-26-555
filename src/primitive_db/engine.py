@@ -5,7 +5,7 @@ import shlex
 import prompt
 from prettytable import PrettyTable
 
-from primitive_db.constants import ID_COLUMN, METADATA_FILE, TYPE_MAPPING
+from primitive_db.constants import ID_COLUMN, METADATA_FILE
 from primitive_db.core import (
     create_table,
     delete,
@@ -20,6 +20,7 @@ from primitive_db.utils import (
     load_table_data,
     save_metadata,
     save_table_data,
+    validate_columns,
 )
 
 
@@ -146,20 +147,7 @@ def run() -> None:
 
                 where_clause = parse_condition(match.group(1).strip())
 
-                column_types = dict(
-                    column.split(":") for column in metadata[table_name]
-                )
-
-                for column, value in where_clause.items():
-                    if column not in column_types:
-                        raise ValueError(f"Столбец '{column}' не существует.")
-
-                    expected_type = TYPE_MAPPING[column_types[column]]
-
-                    if type(value) is not expected_type:
-                        raise ValueError(
-                            f"Некорректный тип значения для столбца '{column}'."
-                        )
+                validate_columns(metadata[table_name], where_clause)
 
                 table_data = load_table_data(table_name)
                 matching_records = select(table_data, where_clause)
@@ -198,20 +186,10 @@ def run() -> None:
                 set_clause = parse_condition(match.group(1).strip())
                 where_clause = parse_condition(match.group(2).strip())
 
-                column_types = dict(
-                    column.split(":") for column in metadata[table_name]
+                validate_columns(
+                    metadata[table_name],
+                    {**set_clause, **where_clause},
                 )
-
-                for column, value in {**set_clause, **where_clause}.items():
-                    if column not in column_types:
-                        raise ValueError(f"Столбец '{column}' не существует.")
-
-                    expected_type = TYPE_MAPPING[column_types[column]]
-
-                    if type(value) is not expected_type:
-                        raise ValueError(
-                            f"Некорректный тип значения для столбца '{column}'."
-                        )
 
                 if ID_COLUMN in set_clause:
                     raise ValueError("Изменение столбца ID запрещено.")
@@ -258,6 +236,9 @@ def run() -> None:
                         raise ValueError("Некорректное условие WHERE.")
 
                     where_clause = parse_condition(match.group(1).strip())
+
+                if where_clause is not None:
+                    validate_columns(metadata[table_name], where_clause)
 
                 table_data = load_table_data(table_name)
                 selected_data = select(table_data, where_clause)

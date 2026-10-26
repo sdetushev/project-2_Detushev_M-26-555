@@ -31,6 +31,7 @@ def create_table(
         return metadata
 
     parsed_columns = []
+    column_names = {ID_COLUMN}
 
     for column in columns:
         parts = column.split(":")
@@ -39,10 +40,16 @@ def create_table(
             print(f"Некорректное значение: {column}. Попробуйте снова.")
             return metadata
 
+        column_name = parts[0]
+
+        if column_name in column_names:
+            print(f'Ошибка: Столбец "{column_name}" уже существует или зарезервирован.')
+            return metadata
+
+        column_names.add(column_name)
         parsed_columns.append(column)
 
-    if not any(column.split(":")[0] == ID_COLUMN for column in parsed_columns):
-        parsed_columns.insert(0, ID_COLUMN_DEFINITION)
+    parsed_columns.insert(0, ID_COLUMN_DEFINITION)
 
     metadata[table_name] = parsed_columns
 
