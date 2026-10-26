@@ -1,6 +1,13 @@
 import json
 from pathlib import Path
 
+from primitive_db.constants import (
+    DATA_DIR,
+    ID_COLUMN,
+    ID_COLUMN_DEFINITION,
+    TYPE_MAPPING,
+    VALID_TYPES,
+)
 from primitive_db.decorators import (
     confirm_action,
     create_cacher,
@@ -23,20 +30,19 @@ def create_table(
         print(f'Ошибка: Таблица "{table_name}" уже существует.')
         return metadata
 
-    valid_types = {"int", "str", "bool"}
     parsed_columns = []
 
     for column in columns:
         parts = column.split(":")
 
-        if len(parts) != 2 or not parts[0] or parts[1] not in valid_types:
+        if len(parts) != 2 or not parts[0] or parts[1] not in VALID_TYPES:
             print(f"Некорректное значение: {column}. Попробуйте снова.")
             return metadata
 
         parsed_columns.append(column)
 
-    if not any(column.split(":")[0] == "ID" for column in parsed_columns):
-        parsed_columns.insert(0, "ID:int")
+    if not any(column.split(":")[0] == ID_COLUMN for column in parsed_columns):
+        parsed_columns.insert(0, ID_COLUMN_DEFINITION)
 
     metadata[table_name] = parsed_columns
 
@@ -58,7 +64,7 @@ def drop_table(metadata: dict, table_name: str) -> dict:
 
     del metadata[table_name]
 
-    filepath = Path("data") / f"{table_name}.json"
+    filepath = Path(DATA_DIR) / f"{table_name}.json"
     filepath.unlink(missing_ok=True)
 
     print(f'Таблица "{table_name}" успешно удалена.')
@@ -81,7 +87,7 @@ def insert(
     columns = metadata[table_name]
     data = load_table_data(table_name)
 
-    user_columns = [column for column in columns if column.split(":")[0] != "ID"]
+    user_columns = [column for column in columns if column.split(":")[0] != ID_COLUMN]
 
     if len(values) != len(user_columns):
         print("Некорректное количество значений. Попробуйте снова.")
@@ -92,12 +98,7 @@ def insert(
     for column, value in zip(user_columns, values, strict=True):
         column_name, column_type = column.split(":")
 
-        if column_type == "int":
-            valid = type(value) is int
-        elif column_type == "str":
-            valid = type(value) is str
-        else:
-            valid = type(value) is bool
+        valid = type(value) is TYPE_MAPPING[column_type]
 
         if not valid:
             print(f"Некорректное значение: {value}. Попробуйте снова.")
@@ -105,8 +106,8 @@ def insert(
 
         record[column_name] = value
 
-    record_id = max((row["ID"] for row in data), default=0) + 1
-    record = {"ID": record_id, **record}
+    record_id = max((row[ID_COLUMN] for row in data), default=0) + 1
+    record = {ID_COLUMN: record_id, **record}
 
     data.append(record)
 
@@ -133,10 +134,10 @@ def select(
     def execute_query() -> list[dict]:
         """Filter records using the given conditions."""
         if where_clause is None:
-            return table_data.copy()
+            return [record.copy() for record in table_data]
 
         return [
-            record
+            record.copy()
             for record in table_data
             if all(
                 record.get(column) == value for column, value in where_clause.items()
@@ -156,7 +157,7 @@ def update(
     for record in table_data:
         if all(record.get(column) == value for column, value in where_clause.items()):
             record.update(set_clause)
-            print(f"Запись с ID={record['ID']} успешно обновлена.")
+            print(f"Запись с ID={record[ID_COLUMN]} успешно обновлена.")
 
     select_cacher.clear_cache()
 
@@ -174,7 +175,7 @@ def delete(
 
     for record in table_data:
         if all(record.get(column) == value for column, value in where_clause.items()):
-            print(f"Запись с ID={record['ID']} успешно удалена.")
+            print(f"Запись с ID={record[ID_COLUMN]} успешно удалена.")
         else:
             remaining_data.append(record)
 

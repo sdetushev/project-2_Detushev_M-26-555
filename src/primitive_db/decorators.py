@@ -65,11 +65,11 @@ def create_cacher() -> Callable:
     cache = {}
 
     def cache_result(key: str, value_func: Callable) -> Any:
-        """Return a cached result or calculate and store it."""
+        """Return a copy of the cached result or calculate and store it."""
         if key not in cache:
             cache[key] = value_func()
 
-        return cache[key]
+        return [record.copy() for record in cache[key]]
 
     def clear_cache() -> None:
         """Remove all cached results."""

@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+from primitive_db.constants import DATA_DIR
+
 
 def load_metadata(filepath: str) -> dict:
     """Load metadata from a JSON file or return an empty dictionary."""
@@ -19,7 +21,7 @@ def save_metadata(filepath: str, data: dict) -> None:
 
 def load_table_data(table_name: str) -> list[dict]:
     """Load table records from a JSON file."""
-    filepath = Path("data") / f"{table_name}.json"
+    filepath = Path(DATA_DIR) / f"{table_name}.json"
 
     try:
         with open(filepath, encoding="utf-8") as file:
@@ -30,7 +32,7 @@ def load_table_data(table_name: str) -> list[dict]:
 
 def save_table_data(table_name: str, data: list[dict]) -> None:
     """Save table records to a JSON file."""
-    filepath = Path("data") / f"{table_name}.json"
+    filepath = Path(DATA_DIR) / f"{table_name}.json"
     filepath.parent.mkdir(parents=True, exist_ok=True)
 
     with open(filepath, "w", encoding="utf-8") as file:

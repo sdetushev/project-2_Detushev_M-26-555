@@ -5,7 +5,7 @@ import shlex
 import prompt
 from prettytable import PrettyTable
 
-from primitive_db.constants import METADATA_FILE
+from primitive_db.constants import ID_COLUMN, METADATA_FILE, TYPE_MAPPING
 from primitive_db.core import (
     create_table,
     delete,
@@ -147,11 +147,7 @@ def run() -> None:
                     if column not in column_types:
                         raise ValueError(f"Столбец '{column}' не существует.")
 
-                    expected_type = {
-                        "int": int,
-                        "str": str,
-                        "bool": bool,
-                    }[column_types[column]]
+                    expected_type = TYPE_MAPPING[column_types[column]]
 
                     if type(value) is not expected_type:
                         raise ValueError(
@@ -200,24 +196,20 @@ def run() -> None:
                     if column not in column_types:
                         raise ValueError(f"Столбец '{column}' не существует.")
 
-                    expected_type = {
-                        "int": int,
-                        "str": str,
-                        "bool": bool,
-                    }[column_types[column]]
+                    expected_type = TYPE_MAPPING[column_types[column]]
 
                     if type(value) is not expected_type:
                         raise ValueError(
                             f"Некорректный тип значения для столбца '{column}'."
                         )
 
-                if "ID" in set_clause:
+                if ID_COLUMN in set_clause:
                     raise ValueError("Изменение столбца ID запрещено.")
 
                 table_data = load_table_data(table_name)
 
                 matching_ids = [
-                    record["ID"] for record in select(table_data, where_clause)
+                    record[ID_COLUMN] for record in select(table_data, where_clause)
                 ]
 
                 if not matching_ids:
