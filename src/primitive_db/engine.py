@@ -67,7 +67,6 @@ def run() -> None:
 
         try:
             args = shlex.split(user_input)
-            quoted_args = shlex.split(user_input, posix=False)
         except ValueError:
             print(f"Некорректное значение: {user_input}. Попробуйте снова.")
             continue
@@ -137,7 +136,15 @@ def run() -> None:
                     print(f'Ошибка: Таблица "{table_name}" не существует.')
                     continue
 
-                where_clause = parse_condition(" ".join(quoted_args[4:]))
+                match = re.match(
+                    r"^\s*delete\s+from\s+\S+\s+where\s+(.+)$",
+                    user_input,
+                )
+
+                if match is None:
+                    raise ValueError("Некорректное условие WHERE.")
+
+                where_clause = parse_condition(match.group(1).strip())
 
                 column_types = dict(
                     column.split(":") for column in metadata[table_name]
@@ -180,13 +187,16 @@ def run() -> None:
                     print(f'Ошибка: Таблица "{table_name}" не существует.')
                     continue
 
-                if args.count("where") != 1:
+                match = re.match(
+                    r"""^\s*update\s+\S+\s+set\s+((?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^"'])*?)\s+where\s+(.+)$""",
+                    user_input,
+                )
+
+                if match is None:
                     raise ValueError("Отсутствует или некорректно указано WHERE.")
 
-                where_index = args.index("where")
-
-                set_clause = parse_condition(" ".join(quoted_args[3:where_index]))
-                where_clause = parse_condition(" ".join(quoted_args[where_index + 1 :]))
+                set_clause = parse_condition(match.group(1).strip())
+                where_clause = parse_condition(match.group(2).strip())
 
                 column_types = dict(
                     column.split(":") for column in metadata[table_name]
@@ -239,7 +249,15 @@ def run() -> None:
                     if len(args) < 7 or args[3] != "where":
                         raise ValueError("Некорректное условие WHERE.")
 
-                    where_clause = parse_condition(" ".join(quoted_args[4:]))
+                    match = re.match(
+                        r"^\s*select\s+from\s+\S+\s+where\s+(.+)$",
+                        user_input,
+                    )
+
+                    if match is None:
+                        raise ValueError("Некорректное условие WHERE.")
+
+                    where_clause = parse_condition(match.group(1).strip())
 
                 table_data = load_table_data(table_name)
                 selected_data = select(table_data, where_clause)
@@ -268,7 +286,15 @@ def run() -> None:
                     print(f'Ошибка: Таблица "{table_name}" не существует.')
                     continue
 
-                values_text = user_input.split("values", maxsplit=1)[1].strip()
+                match = re.match(
+                    r"^\s*insert\s+into\s+\S+\s+values\s+(.+)$",
+                    user_input,
+                )
+
+                if match is None:
+                    raise ValueError("Некорректный синтаксис команды insert.")
+
+                values_text = match.group(1).strip()
 
                 if not values_text.startswith("(") or not values_text.endswith(")"):
                     raise ValueError("Значения должны находиться в скобках.")
@@ -293,7 +319,7 @@ def run() -> None:
                 if result is not None:
                     save_table_data(table_name, result)
 
-            except (ValueError, StopIteration) as error:
+            except (ValueError, SyntaxError, StopIteration) as error:
                 print(f"Ошибка: {error}")
 
         elif command == "drop_table":
