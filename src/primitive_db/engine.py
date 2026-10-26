@@ -186,10 +186,8 @@ def run() -> None:
                 set_clause = parse_condition(match.group(1).strip())
                 where_clause = parse_condition(match.group(2).strip())
 
-                validate_columns(
-                    metadata[table_name],
-                    {**set_clause, **where_clause},
-                )
+                validate_columns(metadata[table_name], set_clause)
+                validate_columns(metadata[table_name], where_clause)
 
                 if ID_COLUMN in set_clause:
                     raise ValueError("Изменение столбца ID запрещено.")

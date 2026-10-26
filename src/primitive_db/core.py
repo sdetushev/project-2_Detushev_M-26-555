@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 
 from primitive_db.constants import (
@@ -26,6 +27,13 @@ def create_table(
     columns: list[str],
 ) -> dict:
     """Create a table with validated columns and an automatic ID field."""
+    if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", table_name) is None:
+        print(
+            "Ошибка: Имя таблицы должно содержать только латинские буквы, "
+            "цифры и подчёркивания и не может начинаться с цифры."
+        )
+        return metadata
+
     if table_name in metadata:
         print(f'Ошибка: Таблица "{table_name}" уже существует.')
         return metadata
