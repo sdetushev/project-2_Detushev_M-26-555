@@ -167,7 +167,9 @@ def run() -> None:
                     continue
 
                 updated_data = delete(table_data, where_clause)
-                save_table_data(table_name, updated_data)
+
+                if updated_data is not None:
+                    save_table_data(table_name, updated_data)
 
             except (ValueError, KeyError) as error:
                 print(f"Ошибка: {error}")
@@ -311,10 +313,12 @@ def run() -> None:
             table_name = args[1]
 
             if table_name in metadata:
-                metadata = drop_table(metadata, table_name)
-                save_metadata(METADATA_FILE, metadata)
+                updated_metadata = drop_table(metadata, table_name)
+
+                if updated_metadata is not None:
+                    save_metadata(METADATA_FILE, updated_metadata)
             else:
-                drop_table(metadata, table_name)
+                print(f'Ошибка: Таблица "{table_name}" не существует.')
 
         else:
             print(f"Функции {command} нет. Попробуйте снова.")

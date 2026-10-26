@@ -1,8 +1,18 @@
+import json
 from pathlib import Path
 
+from primitive_db.decorators import (
+    confirm_action,
+    create_cacher,
+    handle_db_errors,
+    log_time,
+)
 from primitive_db.utils import load_table_data
 
+select_cacher = create_cacher()
 
+
+@handle_db_errors
 def create_table(
     metadata: dict,
     table_name: str,
@@ -38,6 +48,8 @@ def create_table(
     return metadata
 
 
+@handle_db_errors
+@confirm_action("удаление таблицы")
 def drop_table(metadata: dict, table_name: str) -> dict:
     """Delete a table and its data file if it exists."""
     if table_name not in metadata:
@@ -54,6 +66,8 @@ def drop_table(metadata: dict, table_name: str) -> dict:
     return metadata
 
 
+@handle_db_errors
+@log_time
 def insert(
     metadata: dict,
     table_name: str,
@@ -96,26 +110,43 @@ def insert(
 
     data.append(record)
 
+    select_cacher.clear_cache()
+
     print(f'Запись с ID={record_id} успешно добавлена в таблицу "{table_name}".')
 
     return data
 
 
+@handle_db_errors
+@log_time
 def select(
     table_data: list[dict],
     where_clause: dict | None = None,
 ) -> list[dict]:
     """Return all records or filter them by the given conditions."""
-    if where_clause is None:
-        return table_data
+    cache_key = json.dumps(
+        [table_data, where_clause],
+        sort_keys=True,
+        ensure_ascii=False,
+    )
 
-    return [
-        record
-        for record in table_data
-        if all(record.get(column) == value for column, value in where_clause.items())
-    ]
+    def execute_query() -> list[dict]:
+        """Filter records using the given conditions."""
+        if where_clause is None:
+            return table_data.copy()
+
+        return [
+            record
+            for record in table_data
+            if all(
+                record.get(column) == value for column, value in where_clause.items()
+            )
+        ]
+
+    return select_cacher(cache_key, execute_query)
 
 
+@handle_db_errors
 def update(
     table_data: list[dict],
     set_clause: dict,
@@ -127,9 +158,13 @@ def update(
             record.update(set_clause)
             print(f"Запись с ID={record['ID']} успешно обновлена.")
 
+    select_cacher.clear_cache()
+
     return table_data
 
 
+@handle_db_errors
+@confirm_action("удаление записей")
 def delete(
     table_data: list[dict],
     where_clause: dict,
@@ -142,5 +177,7 @@ def delete(
             print(f"Запись с ID={record['ID']} успешно удалена.")
         else:
             remaining_data.append(record)
+
+    select_cacher.clear_cache()
 
     return remaining_data
