@@ -76,12 +76,24 @@ def run() -> None:
         command = args[0]
 
         if command == "exit":
+            if len(args) != 1:
+                print("Некорректное значение: аргументы команды. Попробуйте снова.")
+                continue
+
             break
 
         elif command == "help":
+            if len(args) != 1:
+                print("Некорректное значение: аргументы команды. Попробуйте снова.")
+                continue
+
             print_help()
 
         elif command == "list_tables":
+            if len(args) != 1:
+                print("Некорректное значение: аргументы команды. Попробуйте снова.")
+                continue
+
             if metadata:
                 for table_name in metadata:
                     print(f"- {table_name}")
@@ -126,7 +138,7 @@ def run() -> None:
 
         elif command == "delete":
             try:
-                if len(args) < 7 or args[1] != "from" or args[3] != "where":
+                if len(args) < 5 or args[1] != "from" or args[3] != "where":
                     raise ValueError("Некорректный синтаксис команды delete.")
 
                 table_name = args[2]
@@ -136,7 +148,6 @@ def run() -> None:
                     continue
 
                 where_clause = parse_where(user_input, "delete")
-
                 validate_columns(metadata[table_name], where_clause)
 
                 table_data = load_table_data(table_name)
@@ -156,7 +167,7 @@ def run() -> None:
 
         elif command == "update":
             try:
-                if len(args) < 10 or args[2] != "set":
+                if len(args) < 6 or args[2] != "set":
                     raise ValueError("Некорректный синтаксис команды update.")
 
                 table_name = args[1]
@@ -174,17 +185,16 @@ def run() -> None:
                     raise ValueError("Изменение столбца ID запрещено.")
 
                 table_data = load_table_data(table_name)
+                matching_records = select(table_data, where_clause)
 
-                matching_ids = [
-                    record[ID_COLUMN] for record in select(table_data, where_clause)
-                ]
-
-                if not matching_ids:
+                if not matching_records:
                     print("Записи по указанному условию не найдены.")
                     continue
 
                 updated_data = update(table_data, set_clause, where_clause)
-                save_table_data(table_name, updated_data)
+
+                if updated_data is not None:
+                    save_table_data(table_name, updated_data)
 
             except (ValueError, KeyError) as error:
                 print(f"Ошибка: {error}")
@@ -203,7 +213,7 @@ def run() -> None:
                 where_clause = None
 
                 if len(args) > 3:
-                    if len(args) < 7 or args[3] != "where":
+                    if len(args) < 5 or args[3] != "where":
                         raise ValueError("Некорректное условие WHERE.")
 
                     where_clause = parse_where(user_input, "select")
@@ -239,7 +249,6 @@ def run() -> None:
                     continue
 
                 values = parse_values(user_input)
-
                 result = insert(metadata, table_name, values)
 
                 if result is not None:

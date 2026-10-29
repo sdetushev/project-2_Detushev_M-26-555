@@ -1,6 +1,5 @@
 import json
-import re
-from pathlib import Path
+import os
 
 from primitive_db.constants import (
     DATA_DIR,
@@ -20,6 +19,49 @@ from primitive_db.utils import load_table_data
 select_cacher = create_cacher()
 
 
+def is_valid_table_name(table_name: str) -> bool:
+    """Check whether a table name contains only allowed ASCII characters."""
+    if not table_name:
+        return False
+
+    first_char = table_name[0]
+
+    if not (
+        "A" <= first_char <= "Z"
+        or "a" <= first_char <= "z"
+        or first_char == "_"
+    ):
+        return False
+
+    for char in table_name[1:]:
+        if not (
+            "A" <= char <= "Z"
+            or "a" <= char <= "z"
+            or "0" <= char <= "9"
+            or char == "_"
+        ):
+            return False
+
+    return True
+
+
+def matches_condition(record: dict, where_clause: dict) -> bool:
+    """Check whether a record matches all conditions with strict types."""
+    for column, value in where_clause.items():
+        if column not in record:
+            return False
+
+        record_value = record[column]
+
+        if type(record_value) is not type(value):
+            return False
+
+        if record_value != value:
+            return False
+
+    return True
+
+
 @handle_db_errors
 def create_table(
     metadata: dict,
@@ -27,7 +69,7 @@ def create_table(
     columns: list[str],
 ) -> dict:
     """Create a table with validated columns and an automatic ID field."""
-    if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", table_name) is None:
+    if not is_valid_table_name(table_name):
         print(
             "Ошибка: Имя таблицы должно содержать только латинские буквы, "
             "цифры и подчёркивания и не может начинаться с цифры."
@@ -49,6 +91,14 @@ def create_table(
             return metadata
 
         column_name = parts[0]
+
+        if not is_valid_table_name(column_name):
+            print(
+                f'Ошибка: Некорректное имя столбца "{column_name}". '
+                "Допустимы только латинские буквы, цифры и подчёркивания. "
+                "Имя не может начинаться с цифры."
+            )
+            return metadata
 
         if column_name in column_names:
             print(f'Ошибка: Столбец "{column_name}" уже существует или зарезервирован.')
@@ -79,8 +129,10 @@ def drop_table(metadata: dict, table_name: str) -> dict:
 
     del metadata[table_name]
 
-    filepath = Path(DATA_DIR) / f"{table_name}.json"
-    filepath.unlink(missing_ok=True)
+    filepath = os.path.join(DATA_DIR, f"{table_name}.json")
+
+    if os.path.exists(filepath):
+        os.remove(filepath)
 
     print(f'Таблица "{table_name}" успешно удалена.')
 
@@ -102,7 +154,10 @@ def insert(
     columns = metadata[table_name]
     data = load_table_data(table_name)
 
-    user_columns = [column for column in columns if column.split(":")[0] != ID_COLUMN]
+    user_columns = [
+        column for column in columns
+        if column.split(":")[0] != ID_COLUMN
+    ]
 
     if len(values) != len(user_columns):
         print("Некорректное количество значений. Попробуйте снова.")
@@ -121,7 +176,11 @@ def insert(
 
         record[column_name] = value
 
-    record_id = max((row[ID_COLUMN] for row in data), default=0) + 1
+    record_id = max(
+        (row[ID_COLUMN] for row in data),
+        default=0,
+    ) + 1
+
     record = {ID_COLUMN: record_id, **record}
 
     data.append(record)
@@ -154,9 +213,7 @@ def select(
         return [
             record.copy()
             for record in table_data
-            if all(
-                record.get(column) == value for column, value in where_clause.items()
-            )
+            if matches_condition(record, where_clause)
         ]
 
     return select_cacher(cache_key, execute_query)
@@ -170,7 +227,7 @@ def update(
 ) -> list[dict]:
     """Update records that match the given conditions."""
     for record in table_data:
-        if all(record.get(column) == value for column, value in where_clause.items()):
+        if matches_condition(record, where_clause):
             record.update(set_clause)
             print(f"Запись с ID={record[ID_COLUMN]} успешно обновлена.")
 
@@ -189,7 +246,7 @@ def delete(
     remaining_data = []
 
     for record in table_data:
-        if all(record.get(column) == value for column, value in where_clause.items()):
+        if matches_condition(record, where_clause):
             print(f"Запись с ID={record[ID_COLUMN]} успешно удалена.")
         else:
             remaining_data.append(record)
