@@ -1,5 +1,3 @@
-import ast
-import re
 import shlex
 
 import prompt
@@ -14,7 +12,7 @@ from primitive_db.core import (
     select,
     update,
 )
-from primitive_db.parser import parse_condition
+from primitive_db.parser import parse_update, parse_values, parse_where
 from primitive_db.utils import (
     load_metadata,
     load_table_data,
@@ -137,15 +135,7 @@ def run() -> None:
                     print(f'Ошибка: Таблица "{table_name}" не существует.')
                     continue
 
-                match = re.match(
-                    r"^\s*delete\s+from\s+\S+\s+where\s+(.+)$",
-                    user_input,
-                )
-
-                if match is None:
-                    raise ValueError("Некорректное условие WHERE.")
-
-                where_clause = parse_condition(match.group(1).strip())
+                where_clause = parse_where(user_input, "delete")
 
                 validate_columns(metadata[table_name], where_clause)
 
@@ -175,16 +165,7 @@ def run() -> None:
                     print(f'Ошибка: Таблица "{table_name}" не существует.')
                     continue
 
-                match = re.match(
-                    r"""^\s*update\s+\S+\s+set\s+((?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^"'])*?)\s+where\s+(.+)$""",
-                    user_input,
-                )
-
-                if match is None:
-                    raise ValueError("Отсутствует или некорректно указано WHERE.")
-
-                set_clause = parse_condition(match.group(1).strip())
-                where_clause = parse_condition(match.group(2).strip())
+                set_clause, where_clause = parse_update(user_input)
 
                 validate_columns(metadata[table_name], set_clause)
                 validate_columns(metadata[table_name], where_clause)
@@ -225,15 +206,7 @@ def run() -> None:
                     if len(args) < 7 or args[3] != "where":
                         raise ValueError("Некорректное условие WHERE.")
 
-                    match = re.match(
-                        r"^\s*select\s+from\s+\S+\s+where\s+(.+)$",
-                        user_input,
-                    )
-
-                    if match is None:
-                        raise ValueError("Некорректное условие WHERE.")
-
-                    where_clause = parse_condition(match.group(1).strip())
+                    where_clause = parse_where(user_input, "select")
 
                 if where_clause is not None:
                     validate_columns(metadata[table_name], where_clause)
@@ -265,33 +238,7 @@ def run() -> None:
                     print(f'Ошибка: Таблица "{table_name}" не существует.')
                     continue
 
-                match = re.match(
-                    r"^\s*insert\s+into\s+\S+\s+values\s+(.+)$",
-                    user_input,
-                )
-
-                if match is None:
-                    raise ValueError("Некорректный синтаксис команды insert.")
-
-                values_text = match.group(1).strip()
-
-                if not values_text.startswith("(") or not values_text.endswith(")"):
-                    raise ValueError("Значения должны находиться в скобках.")
-
-                values_text = values_text[1:-1]
-
-                values_text = re.sub(
-                    r'("(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|\btrue\b|\bfalse\b)',
-                    lambda match: (
-                        match.group(0)
-                        if match.group(0).startswith(('"', "'"))
-                        else match.group(0).capitalize()
-                    ),
-                    values_text,
-                    flags=re.IGNORECASE,
-                )
-
-                values = list(ast.literal_eval(f"[{values_text}]"))
+                values = parse_values(user_input)
 
                 result = insert(metadata, table_name, values)
 
