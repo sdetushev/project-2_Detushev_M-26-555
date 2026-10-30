@@ -1,3 +1,4 @@
+import json
 import shlex
 
 import prompt
@@ -12,8 +13,10 @@ from primitive_db.core import (
     select,
     update,
 )
+from primitive_db.decorators import create_cacher
 from primitive_db.parser import parse_update, parse_values, parse_where
 from primitive_db.utils import (
+    delete_table_data,
     load_metadata,
     load_table_data,
     save_metadata,
@@ -56,9 +59,19 @@ def print_help() -> None:
     print("<command> help - справочная информация\n")
 
 
+def print_command_error(error: Exception) -> None:
+    """Display a consistent message for invalid command values."""
+    message = str(error)
+    if message.startswith("Некорректное значение:"):
+        print(f"{message}. Попробуйте снова.")
+    else:
+        print(f"Ошибка: {message}")
+
+
 def run() -> None:
     """Run the database command-line interface."""
     print_help()
+    cache_result = create_cacher()
 
     while True:
         metadata = load_metadata(METADATA_FILE)
@@ -151,7 +164,10 @@ def run() -> None:
                 validate_columns(metadata[table_name], where_clause)
 
                 table_data = load_table_data(table_name)
-                matching_records = select(table_data, where_clause)
+                matching_records = cache_result(
+                    json.dumps([table_name, where_clause], sort_keys=True),
+                    lambda: select(table_data, where_clause),
+                )
 
                 if not matching_records:
                     print("Записи по указанному условию не найдены.")
@@ -161,9 +177,15 @@ def run() -> None:
 
                 if updated_data is not None:
                     save_table_data(table_name, updated_data)
+                    cache_result = create_cacher()
+                    for record in matching_records:
+                        print(
+                            f"Запись с ID={record[ID_COLUMN]} успешно удалена "
+                            f'из таблицы "{table_name}".'
+                        )
 
             except (ValueError, KeyError) as error:
-                print(f"Ошибка: {error}")
+                print_command_error(error)
 
         elif command == "update":
             try:
@@ -185,7 +207,10 @@ def run() -> None:
                     raise ValueError("Изменение столбца ID запрещено.")
 
                 table_data = load_table_data(table_name)
-                matching_records = select(table_data, where_clause)
+                matching_records = cache_result(
+                    json.dumps([table_name, where_clause], sort_keys=True),
+                    lambda: select(table_data, where_clause),
+                )
 
                 if not matching_records:
                     print("Записи по указанному условию не найдены.")
@@ -195,9 +220,15 @@ def run() -> None:
 
                 if updated_data is not None:
                     save_table_data(table_name, updated_data)
+                    cache_result = create_cacher()
+                    for record in matching_records:
+                        print(
+                            f"Запись с ID={record[ID_COLUMN]} в таблице "
+                            f'"{table_name}" успешно обновлена.'
+                        )
 
             except (ValueError, KeyError) as error:
-                print(f"Ошибка: {error}")
+                print_command_error(error)
 
         elif command == "select":
             try:
@@ -222,7 +253,10 @@ def run() -> None:
                     validate_columns(metadata[table_name], where_clause)
 
                 table_data = load_table_data(table_name)
-                selected_data = select(table_data, where_clause)
+                selected_data = cache_result(
+                    json.dumps([table_name, where_clause], sort_keys=True),
+                    lambda: select(table_data, where_clause),
+                )
 
                 columns = [column.split(":")[0] for column in metadata[table_name]]
 
@@ -235,7 +269,7 @@ def run() -> None:
                 print(table)
 
             except (ValueError, KeyError) as error:
-                print(f"Ошибка: {error}")
+                print_command_error(error)
 
         elif command == "insert":
             try:
@@ -249,13 +283,15 @@ def run() -> None:
                     continue
 
                 values = parse_values(user_input)
-                result = insert(metadata, table_name, values)
+                table_data = load_table_data(table_name)
+                result = insert(metadata, table_name, table_data, values)
 
                 if result is not None:
                     save_table_data(table_name, result)
+                    cache_result = create_cacher()
 
             except (ValueError, SyntaxError, StopIteration) as error:
-                print(f"Ошибка: {error}")
+                print_command_error(error)
 
         elif command == "drop_table":
             if len(args) != 2:
@@ -269,6 +305,9 @@ def run() -> None:
 
                 if updated_metadata is not None:
                     save_metadata(METADATA_FILE, updated_metadata)
+                    delete_table_data(table_name)
+                    cache_result = create_cacher()
+                    print(f'Таблица "{table_name}" успешно удалена.')
             else:
                 print(f'Ошибка: Таблица "{table_name}" не существует.')
 

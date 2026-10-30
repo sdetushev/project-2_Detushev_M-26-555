@@ -75,10 +75,4 @@ def create_cacher():
 
         return [record.copy() for record in cache[key]]
 
-    def clear_cache() -> None:
-        """Remove all cached results."""
-        cache.clear()
-
-    cache_result.clear_cache = clear_cache
-
     return cache_result

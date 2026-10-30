@@ -54,3 +54,10 @@ def validate_columns(
 
         if type(value) is not expected_type:
             raise ValueError(f"Некорректный тип значения для столбца '{column}'.")
+
+
+def delete_table_data(table_name: str) -> None:
+    """Remove a table data file if it exists."""
+    filepath = os.path.join(DATA_DIR, f"{table_name}.json")
+    if os.path.exists(filepath):
+        os.remove(filepath)

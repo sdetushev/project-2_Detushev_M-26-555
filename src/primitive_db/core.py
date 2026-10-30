@@ -1,8 +1,4 @@
-import json
-import os
-
 from primitive_db.constants import (
-    DATA_DIR,
     ID_COLUMN,
     ID_COLUMN_DEFINITION,
     TYPE_MAPPING,
@@ -10,13 +6,9 @@ from primitive_db.constants import (
 )
 from primitive_db.decorators import (
     confirm_action,
-    create_cacher,
     handle_db_errors,
     log_time,
 )
-from primitive_db.utils import load_table_data
-
-select_cacher = create_cacher()
 
 
 def is_valid_table_name(table_name: str) -> bool:
@@ -26,11 +18,7 @@ def is_valid_table_name(table_name: str) -> bool:
 
     first_char = table_name[0]
 
-    if not (
-        "A" <= first_char <= "Z"
-        or "a" <= first_char <= "z"
-        or first_char == "_"
-    ):
+    if not ("A" <= first_char <= "Z" or "a" <= first_char <= "z" or first_char == "_"):
         return False
 
     for char in table_name[1:]:
@@ -122,21 +110,14 @@ def create_table(
 @handle_db_errors
 @confirm_action("удаление таблицы")
 def drop_table(metadata: dict, table_name: str) -> dict:
-    """Delete a table and its data file if it exists."""
+    """Remove a table definition from metadata after confirmation."""
     if table_name not in metadata:
         print(f'Ошибка: Таблица "{table_name}" не существует.')
         return metadata
 
-    del metadata[table_name]
-
-    filepath = os.path.join(DATA_DIR, f"{table_name}.json")
-
-    if os.path.exists(filepath):
-        os.remove(filepath)
-
-    print(f'Таблица "{table_name}" успешно удалена.')
-
-    return metadata
+    updated_metadata = metadata.copy()
+    del updated_metadata[table_name]
+    return updated_metadata
 
 
 @handle_db_errors
@@ -144,6 +125,7 @@ def drop_table(metadata: dict, table_name: str) -> dict:
 def insert(
     metadata: dict,
     table_name: str,
+    table_data: list[dict],
     values: list,
 ) -> list[dict] | None:
     """Validate values and insert a new record into a table."""
@@ -152,12 +134,8 @@ def insert(
         return None
 
     columns = metadata[table_name]
-    data = load_table_data(table_name)
 
-    user_columns = [
-        column for column in columns
-        if column.split(":")[0] != ID_COLUMN
-    ]
+    user_columns = [column for column in columns if column.split(":")[0] != ID_COLUMN]
 
     if len(values) != len(user_columns):
         print("Некорректное количество значений. Попробуйте снова.")
@@ -176,20 +154,22 @@ def insert(
 
         record[column_name] = value
 
-    record_id = max(
-        (row[ID_COLUMN] for row in data),
-        default=0,
-    ) + 1
+    record_id = (
+        max(
+            (row[ID_COLUMN] for row in table_data),
+            default=0,
+        )
+        + 1
+    )
 
     record = {ID_COLUMN: record_id, **record}
 
-    data.append(record)
-
-    select_cacher.clear_cache()
+    updated_data = [row.copy() for row in table_data]
+    updated_data.append(record)
 
     print(f'Запись с ID={record_id} успешно добавлена в таблицу "{table_name}".')
 
-    return data
+    return updated_data
 
 
 @handle_db_errors
@@ -198,25 +178,15 @@ def select(
     table_data: list[dict],
     where_clause: dict | None = None,
 ) -> list[dict]:
-    """Return all records or filter them by the given conditions."""
-    cache_key = json.dumps(
-        [table_data, where_clause],
-        sort_keys=True,
-        ensure_ascii=False,
-    )
+    """Return copies of records matching the optional condition."""
+    if where_clause is None:
+        return [record.copy() for record in table_data]
 
-    def execute_query() -> list[dict]:
-        """Filter records using the given conditions."""
-        if where_clause is None:
-            return [record.copy() for record in table_data]
-
-        return [
-            record.copy()
-            for record in table_data
-            if matches_condition(record, where_clause)
-        ]
-
-    return select_cacher(cache_key, execute_query)
+    return [
+        record.copy()
+        for record in table_data
+        if matches_condition(record, where_clause)
+    ]
 
 
 @handle_db_errors
@@ -225,15 +195,13 @@ def update(
     set_clause: dict,
     where_clause: dict,
 ) -> list[dict]:
-    """Update records that match the given conditions."""
-    for record in table_data:
-        if matches_condition(record, where_clause):
-            record.update(set_clause)
-            print(f"Запись с ID={record[ID_COLUMN]} успешно обновлена.")
-
-    select_cacher.clear_cache()
-
-    return table_data
+    """Return updated records without mutating the input records."""
+    return [
+        {**record, **set_clause}
+        if matches_condition(record, where_clause)
+        else record.copy()
+        for record in table_data
+    ]
 
 
 @handle_db_errors
@@ -242,15 +210,9 @@ def delete(
     table_data: list[dict],
     where_clause: dict,
 ) -> list[dict]:
-    """Delete records that match the given conditions."""
-    remaining_data = []
-
-    for record in table_data:
-        if matches_condition(record, where_clause):
-            print(f"Запись с ID={record[ID_COLUMN]} успешно удалена.")
-        else:
-            remaining_data.append(record)
-
-    select_cacher.clear_cache()
-
-    return remaining_data
+    """Return the records remaining after confirmed deletion."""
+    return [
+        record.copy()
+        for record in table_data
+        if not matches_condition(record, where_clause)
+    ]

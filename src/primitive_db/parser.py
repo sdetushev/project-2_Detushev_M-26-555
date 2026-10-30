@@ -12,6 +12,15 @@ def parse_value(value: str) -> int | str | bool:
         return False
 
     if value.startswith(('"', "'")):
+        quote = value[0]
+        escaped = False
+        for index, char in enumerate(value[1:], start=1):
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote and index != len(value) - 1:
+                raise ValueError(f"Некорректное значение: {value}")
         if len(value) < 2 or value[-1] != value[0]:
             raise ValueError(f"Некорректное значение: {value}")
 
@@ -34,16 +43,46 @@ def parse_value(value: str) -> int | str | bool:
 
 
 def parse_condition(condition: str) -> dict:
-    """Parse a column equality condition into a dictionary."""
-    parts = condition.split("=", maxsplit=1)
+    """Parse exactly one equality condition outside quoted strings."""
+    quote = None
+    escaped = False
+    equal_index = None
 
-    if len(parts) != 2:
+    for index, char in enumerate(condition):
+        if escaped:
+            escaped = False
+            continue
+        if char == "\\" and quote is not None:
+            escaped = True
+            continue
+        if char in ('"', "'"):
+            if quote is None:
+                quote = char
+            elif quote == char:
+                quote = None
+            continue
+        if char == "=" and quote is None:
+            if equal_index is not None:
+                raise ValueError(f"Некорректное условие: {condition}")
+            equal_index = index
+
+    if quote is not None or equal_index is None:
         raise ValueError(f"Некорректное условие: {condition}")
 
-    column = parts[0].strip()
-    value = parts[1].strip()
+    column = condition[:equal_index].strip()
+    value = condition[equal_index + 1 :].strip()
 
-    if not column or not value:
+    if (
+        not column
+        or not value
+        or not (
+            column[0].isascii()
+            and (column[0].isalpha() or column[0] == "_")
+            and all(
+                char.isascii() and (char.isalnum() or char == "_") for char in column
+            )
+        )
+    ):
         raise ValueError(f"Некорректное условие: {condition}")
 
     return {column: parse_value(value)}
@@ -131,7 +170,7 @@ def parse_update(user_input: str) -> tuple[dict, dict]:
         raise ValueError("Отсутствует или некорректно указано WHERE.")
 
     set_text = " ".join(parts[3:where_index])
-    where_text = " ".join(parts[where_index + 1:])
+    where_text = " ".join(parts[where_index + 1 :])
 
     if not set_text or not where_text:
         raise ValueError("Отсутствует или некорректно указано WHERE.")
@@ -185,6 +224,9 @@ def parse_values(user_input: str) -> list:
 
             current.append(char)
             continue
+
+        if quote is None and char in ("(", ")"):
+            raise ValueError("Некорректный синтаксис значений.")
 
         if char == "," and quote is None:
             value = "".join(current).strip()

@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "A command-line database application with JSON storage, CRUD operations, decorators, and query caching"
 readme = "README.md"
 authors = [
-    { name = "Sam", email = "agro.gnom@yandex.ru" }
+    { name = "Semyon Detushev", email = "agro.gnom@yandex.ru" }
 ]
 requires-python = ">=3.12"
 dependencies = [
@@ -14,6 +14,7 @@ dependencies = [
 
 [project.scripts]
 database = "primitive_db.main:main"
+project = "primitive_db.main:main"
 
 [build-system]
 requires = ["uv_build>=0.12.19,<0.13.0"]
